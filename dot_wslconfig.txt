@@ -1,0 +1,14 @@
+# この内容で C:\Users\<あなたのユーザー名>\.wslconfig を上書き保存してください。
+
+[wsl2]
+# メモリを12GBに増強 (PC全体が32GBあるため、これでかなり余裕が出ます)
+memory=12GB
+
+# CPUコア数はそのままでOK
+processors=2
+
+# スワップ領域を8GBに増強 (メモリが溢れた時の保険を厚くする)
+swap=8GB
+
+# Windowsからのlocalhost接続を許可
+localhostForwarding=true

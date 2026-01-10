@@ -1,0 +1,28 @@
+services:
+  # サービス名: ここではシンプルに 'db' とします
+  db:
+    # 使用するイメージ: 公式のPostgreSQL バージョン15を使用
+    image: postgres:15
+    
+    # コンテナ名: docker ps で見た時にわかりやすい名前をつける
+    container_name: eroge-postgres
+    
+    # 環境変数: DBの初期ユーザーとパスワード、DB名を設定
+    # ※本番環境ではパスワードを直書きせず .env ファイルを使いますが、
+    #   開発段階なのでわかりやすさ優先でここに書きます。
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: erogedb
+    
+    # ポートフォワーディング: 
+    # 左側がホスト(WSL2)のポート : 右側がコンテナ内のポート
+    ports:
+      - "5432:5432"
+    
+    # ボリュームマウント (データの永続化):
+    # 左側がホストのフォルダ : 右側がコンテナ内のデータ保存場所
+    # これにより、プロジェクトフォルダに 'postgres_data' というフォルダが自動生成され、
+    # そこにDBのデータが保存されます。
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data

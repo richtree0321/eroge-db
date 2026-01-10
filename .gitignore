@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+*.ipynb_checkpoints
+
+# VS Code
+.vscode/
+
+# Docker
+postgres_data/
+
+# Environment variables
+.env
+
+# OS
+.DS_Store
+Thumbs.db

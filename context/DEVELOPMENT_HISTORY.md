@@ -102,3 +102,88 @@ Pythonスクリプト `ingest_vndb_data.py` を作成し、ETL処理（Extract, 
 - プロジェクトをGitHubリポジトリ (`eroge-db`) で管理開始しました。
 - `.gitignore` を設定し、仮想環境やDBデータなどの不要ファイルを排除。
 - 初回コミット＆プッシュ完了。
+
+---
+
+## 2026-01-10: Webフロントエンド構築【Phase 4】
+
+### 1. セキュリティ強化（環境変数化）
+**背景**: リポジトリをPublicにするため、パスワード等の機密情報をコードから排除する必要がありました。
+
+**実装内容**:
+- `.env` ファイルを作成し、データベース接続情報を環境変数で管理
+- `python-dotenv` ライブラリを導入
+- Python側のスクリプト (`ingest_vndb_data.py`, `db_connection_test.py` など) を `os.getenv()` を使用する形に修正
+- `docker-compose.yml` も環境変数を参照する形に変更
+
+### 2. プロジェクトの整理
+- 不要な実験用ファイルを削除 (`main.py`, `vndb_test.py`, `db_test.ipynb` など)
+- ディレクトリ構成をクリーンに保ち、本番に向けた準備
+
+### 3. Next.js環境構築
+**技術選定の理由**:
+- **Node.js (v24.12.0)**: JavaScript実行環境
+- **nvm (Node Version Manager)**: バージョン管理ツール（インフラエンジニアらしい環境構築）
+- **Next.js 16.1.1**: Reactベースのフルスタックフレームワーク
+  - App Router採用（最新のルーティング方式）
+  - TypeScript対応（型安全性）
+  - Tailwind CSS統合（高速なスタイリング）
+
+**構築手順**:
+1. nvmのインストール (`curl` 経由)
+2. Node.js LTSのインストール
+3. `create-next-app` でプロジェクト作成（`frontend` ディレクトリ）
+4. 開発サーバーの起動確認
+
+**WSLネットワーク問題の解決**:
+- WindowsブラウザからWSL内のlocalhostに接続できない問題が発生
+- 解決策: WSLのネットワークIPアドレス (`172.23.92.20:3000`) を使用
+
+### 4. データベース統合（フルスタック化）
+**目標**: PostgreSQLのデータをブラウザで表示する
+
+**実装内容**:
+- `pg` ライブラリのインストール（PostgreSQL接続用ドライバ）
+- `@types/pg` でTypeScript型定義を追加
+- `.env.local` ファイルでデータベース接続情報を管理
+- `app/page.tsx` を実装:
+  - データベース接続プール (`Pool`) の作成
+  - SQLクエリでゲーム情報を取得 (`SELECT id, title, rating, image_url ...`)
+  - React/Next.jsのServer Componentsでデータを表示
+  - Tailwind CSSでカードUI実装
+
+**学習ポイント**:
+- 各行に詳細な日本語コメントを追加（初学者でも理解できるように）
+- PythonのPsycopg2とNode.jsのpgライブラリの対応関係を明示
+- JSXの書き方、TypeScriptの型定義、Tailwind CSSのクラス名など丁寧に解説
+
+### 5. 画像表示機能の追加
+- パッケージ画像 (`image_url`) をデータベースから取得
+- 各ゲームカードに画像とテキストを横並びで表示
+- Flexboxレイアウトで整理された見た目を実現
+
+**完成した機能**:
+- トップページ (`http://172.23.92.20:3000`) でゲーム一覧表示
+- 評価点の高い順に10件表示
+- 各カードにパッケージ画像、タイトル、評価点を表示
+
+---
+
+## 達成したマイルストーン
+
+**VNDB → Python → PostgreSQL → Next.js → ブラウザ** という完全なパイプラインが貫通しました。
+
+これにより、以下の技術スタックを実践的に習得：
+- **バックエンド**: Python (データ取得・加工)
+- **データベース**: PostgreSQL (Docker Compose)
+- **フロントエンド**: Next.js (TypeScript + Tailwind CSS)
+- **インフラ**: WSL2, Docker, GitHub
+- **開発手法**: 環境変数管理、バージョン管理、段階的実装
+
+---
+
+## 次のステップ候補
+- タグ情報の表示（JSONB活用）
+- 検索・フィルタ機能
+- ページネーション（100件以上のデータ表示）
+- デプロイ準備（AWS Lightsailへの展開）

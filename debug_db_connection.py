@@ -1,14 +1,19 @@
 import psycopg2  # PostgreSQL接続用ライブラリをインポート
 import sys  # システム終了などの標準機能を使うためのライブラリ
+import os
+from dotenv import load_dotenv
+
+# .envファイルから環境変数を読み込む
+load_dotenv()
 
 def test_connection():
     # 接続情報を辞書形式で定義
     config = {
-        "user": "myuser",  # ユーザー名
-        "password": "mypassword",  # パスワード
-        "host": "localhost",  # ホスト名 (Docker Desktopによりlocalhostでアクセス可能)
-        "port": "5432",  # ポート番号
-        "database": "erogedb"  # データベース名
+        "user": os.getenv("POSTGRES_USER"),  # ユーザー名
+        "password": os.getenv("POSTGRES_PASSWORD"),  # パスワード
+        "host": os.getenv("POSTGRES_HOST"),  # ホスト名 (Docker Desktopによりlocalhostでアクセス可能)
+        "port": os.getenv("POSTGRES_PORT"),  # ポート番号
+        "database": os.getenv("POSTGRES_DB")  # データベース名
     }
 
     try:

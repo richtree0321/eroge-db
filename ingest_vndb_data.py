@@ -8,16 +8,21 @@ import json
 import psycopg2
 from psycopg2.extras import Json
 from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+# .envファイルから環境変数を読み込む
+load_dotenv()
 
 # -----------------------------------------------------------------------------
 # 1. 設定・接続・テーブル作成（ステップ1と同じ）
 # -----------------------------------------------------------------------------
 DB_CONFIG = {
-    'dbname': 'postgres',
-    'user': 'myuser',
-    'password': 'mypassword',
-    'host': 'localhost',
-    'port': '5432'
+    'dbname': os.getenv('POSTGRES_DB'),
+    'user': os.getenv('POSTGRES_USER'),
+    'password': os.getenv('POSTGRES_PASSWORD'),
+    'host': os.getenv('POSTGRES_HOST'),
+    'port': os.getenv('POSTGRES_PORT')
 }
 
 def get_db_connection():

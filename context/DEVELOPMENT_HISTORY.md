@@ -97,3 +97,8 @@ Pythonスクリプト `ingest_vndb_data.py` を作成し、ETL処理（Extract, 
 - **解決**:
   - 実行時は必ず `./.venv/bin/python ...` を使用する。
   - 作業開始前に `docker compose up -d` を確認する。
+
+### 3. ソースコード管理の開始 (GitHub)
+- プロジェクトをGitHubリポジトリ (`eroge-db`) で管理開始しました。
+- `.gitignore` を設定し、仮想環境やDBデータなどの不要ファイルを排除。
+- 初回コミット＆プッシュ完了。

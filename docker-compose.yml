@@ -11,9 +11,9 @@ services:
     # ※本番環境ではパスワードを直書きせず .env ファイルを使いますが、
     #   開発段階なのでわかりやすさ優先でここに書きます。
     environment:
-      POSTGRES_USER: myuser
-      POSTGRES_PASSWORD: mypassword
-      POSTGRES_DB: erogedb
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     
     # ポートフォワーディング: 
     # 左側がホスト(WSL2)のポート : 右側がコンテナ内のポート

@@ -1,14 +1,19 @@
 import psycopg2  # PostgreSQLに接続するためのライブラリを読み込む
 import time  # 時間計測や待機を行うためのライブラリを読み込む
+import os
+from dotenv import load_dotenv
+
+# .envファイルから環境変数を読み込む
+load_dotenv()
 
 def test_db_connection():
     # 接続情報を辞書として定義する（docker-compose.ymlの設定と合わせる）
     connection_config = {
-        "user": "myuser",        # ユーザー名
-        "password": "mypassword", # パスワード
-        "host": "localhost",     # ホスト名（ローカル環境なのでlocalhost）
-        "port": "5432",          # ポート番号（PostgreSQLのデフォルトは5432）
-        "database": "erogedb"    # データベース名
+        "user": os.getenv("POSTGRES_USER"),        # ユーザー名
+        "password": os.getenv("POSTGRES_PASSWORD"), # パスワード
+        "host": os.getenv("POSTGRES_HOST"),     # ホスト名（ローカル環境なのでlocalhost）
+        "port": os.getenv("POSTGRES_PORT"),          # ポート番号（PostgreSQLのデフォルトは5432）
+        "database": os.getenv("POSTGRES_DB")    # データベース名
     }
 
     try:

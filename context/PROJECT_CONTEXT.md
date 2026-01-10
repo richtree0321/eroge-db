@@ -11,24 +11,50 @@
 
 # 技術スタック
 - OS: Windows 11 + WSL2 (Ubuntu)
-- Backend: Python 3.x (FastAPI or pure scripts for scraping)
-- Frontend: Next.js (App Router) + Tailwind CSS
-- DB: PostgreSQL
+- Backend: Python 3.x (データ取得・ETL処理)
+- Frontend: Next.js 16.1.1 (App Router) + TypeScript + Tailwind CSS
+- DB: PostgreSQL 15
 - Infrastructure: Docker / Docker Compose
+- Node.js: v24.12.0 (nvm管理)
+- バージョン管理: Git / GitHub
 
 # 現在の状況 (2026-01-10時点)
-- WSL2 (Ubuntu) 環境構築完了、Python venv 導入済み。
-- `requests` を使用したVNDB APIデータ取得スクリプト (`vndb_test.py`) 動作確認済み。
-- Docker Compose による PostgreSQL サーバー (`eroge-postgres`) 構築完了。
-- WSL接続不安定問題に対し、`.wslconfig` でメモリ12GB・Swap 8GBを割り当て、安定稼働を確認済み。
-- Python (`psycopg2`) から PostgreSQL への接続テスト (`db_connection_test.py`) 成功。
-- トラブルシューティングの知見をまとめたZenn用記事 (`zenn_wsl_trouble_shooting.md`) を作成済み。
 
-# 次回のタスク
-1. VNDB APIから取得したデータを整形し、PostgreSQLにINSERTするスクリプトを作成する。
-   - Jupyter Notebook (`experiment.ipynb`) を活用してデータ加工ロジックを試行錯誤する。
-2. データベースのテーブル設計（スキーマ定義）を行う。
-3. Next.jsを導入して、DB内のデータをブラウザで表示する。
+## インフラ・環境
+- WSL2 (Ubuntu) 環境構築完了、Python venv 導入済み
+- Docker Compose による PostgreSQL 15 サーバー (`eroge-postgres`) 稼働中
+- WSL安定化: `.wslconfig` でメモリ12GB・Swap 8GB割り当て済み
+- Node.js v24.12.0 (nvm経由) インストール済み
+
+## バックエンド (Python)
+- VNDB APIデータ取得スクリプト (`ingest_vndb_data.py`) 実装完了
+- PostgreSQLへのデータ投入成功 (10件のゲーム情報を保存)
+- 環境変数化 (`.env` + `python-dotenv`) によるセキュリティ対策実施
+
+## フロントエンド (Next.js)
+- Next.js 16.1.1 プロジェクト作成完了 (`frontend/`)
+- PostgreSQL接続 (`pg` ライブラリ) 実装済み
+- トップページでゲーム一覧表示機能実装
+  - パッケージ画像付きカード表示
+  - 評価点順ソート機能
+  - アクセスURL: `http://172.23.92.20:3000` (WSLネットワークIP)
+
+## バージョン管理
+- GitHubリポジトリ (`eroge-db`) で管理中
+- セキュリティ対策として環境変数ファイルを `.gitignore` で除外済み
+
+# 次のステップ候補
+1. **UI/UX強化**
+   - タグ情報の表示（JSONB型データの活用）
+   - レスポンシブデザインの改善
+   - 詳細ページの実装
+2. **機能追加**
+   - 検索・フィルタ機能（タイトル検索、評価点フィルタなど）
+   - ページネーション（より多くのデータ表示）
+3. **データ拡充**
+   - データ件数を10件→100件以上に増やす
+4. **デプロイ準備**
+   - AWS Lightsail / EC2 + RDS への展開を検討
 
 # 開発方針
 - 「小さく作って動かす」を徹底する。

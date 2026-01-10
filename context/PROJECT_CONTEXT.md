@@ -37,3 +37,24 @@
 
 # geminiリンク
 https://gemini.google.com/share/5a1f931affac
+
+# データベース設計 (Database Schema)
+
+## visual_novels (ゲーム情報)
+
+| 列名 (Column) | データ型 (Type) | 説明 (意味) |
+| :--- | :--- | :--- |
+| **id** | VARCHAR(50) | ゲームID (主キー)。例: "v11" |
+| **title** | TEXT | タイトル |
+| **alttitle** | TEXT | 別名 (ローマ字表記など) |
+| **released** | DATE | 発売日 |
+| **description** | TEXT | 説明文・あらすじ |
+| **image_url** | TEXT | メイン画像のURL |
+| **image_sexual** | REAL | 性的コンテンツの度合い (0.0〜2.0) |
+| **image_violence** | REAL | 暴力コンテンツの度合い (0.0〜2.0) |
+| **rating** | REAL | ユーザー評価点 (100点満点など) |
+| **votecount** | INTEGER | 投票数 |
+| **tags** | JSONB | タグ情報 (リスト形式で保存) |
+| **developers** | JSONB | 開発会社情報 (リスト形式で保存) |
+| **screenshots** | JSONB | スクリーンショットURL一覧 |
+| **updated_at** | TIMESTAMP | データ更新日時 |

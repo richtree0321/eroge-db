@@ -2,12 +2,16 @@
 エロゲ・AVのデータベースサイト構築プロジェクト。
 最大の目的はプログラミングの学習です。
 最終的にはアフィリエイト収益の自動化を目指す。
-インフラエンジニア志望のため、AWS Lightsail (将来的にEC2+RDS) へのデプロイを見据えて開発する。
 
-# 方針
+# 学習方針
 
-プログラミング初学者が勉強にもなるようにコードの各行に解説をいれながらコードを書いてください
-また一気に進めるのではなく、プログラミング初学者でも理解できるように少しずつ進めてください
+**現在の学習フォーカス: フロントエンド開発（Next.js/TypeScript）**
+
+- プログラミング初学者が勉強にもなるようにコードの各行に解説をいれながらコードを書いてください
+- 一気に進めるのではなく、プログラミング初学者でも理解できるように少しずつ進めてください
+- **Python比較は不要**: TypeScript/JavaScriptの説明に集中してください
+- **インフラ関連の話題は不要**: フロントエンド開発に関係ない場合は触れないでください
+- 説明は簡潔に、ノイズを減らしてください
 
 # 技術スタック
 - OS: Windows 11 + WSL2 (Ubuntu)
@@ -55,6 +59,53 @@
    - データ件数を10件→100件以上に増やす
 4. **デプロイ準備**
    - AWS Lightsail / EC2 + RDS への展開を検討
+
+# 開発開始時のチェックリスト
+
+**開発を始める前に、必ず以下を確認してください：**
+
+## 1. Docker / PostgreSQL の起動確認
+
+```bash
+# Dockerコンテナの状態を確認
+docker ps | grep eroge-postgres
+
+# 起動していない場合は起動
+docker compose up -d
+
+# データベース接続確認
+docker exec -it eroge-postgres psql -U myuser -d erogedb -c "SELECT COUNT(*) FROM visual_novels;"
+```
+
+## 2. Next.js 開発サーバーの起動確認
+
+```bash
+# ポート3000が使用されているか確認
+lsof -ti:3000
+
+# 起動していない場合は起動（frontendディレクトリで）
+cd frontend
+npm run dev -- -H 0.0.0.0
+```
+
+## 3. アクセスURL
+
+- **Next.js**: `http://localhost:3000`
+- **WSL環境の場合**: `http://localhost:3000` で接続してください（192.168.x.xではなく）
+
+## 4. Pythonスクリプトの実行
+
+Pythonスクリプトはvenv環境で自動的に実行されるように設定されています。
+
+```bash
+# データ取得スクリプトを実行
+./ingest_vndb_data.py
+
+# または従来の方法
+source .venv/bin/activate && python ingest_vndb_data.py
+```
+
+---
 
 # 開発方針
 - 「小さく作って動かす」を徹底する。

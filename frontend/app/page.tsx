@@ -6,6 +6,7 @@
 // Poolは「データベース接続のプール（複数の接続を使い回す仕組み）」のこと
 // Pythonでいう psycopg2.connect() に似ているが、より効率的
 import { Pool } from 'pg';
+import { translateTag } from '@/lib/tagTranslations';  // タグ翻訳関数をインポート
 
 // ========================================
 // データベース接続プール（コネクションプール）の作成
@@ -26,10 +27,14 @@ const pool = new Pool({
 // これは「ゲーム1つ分のデータがどんな形をしているか」を説明するもの
 // Pythonでいう辞書 (dict) の「鍵 (key) のリスト」を事前に決めておくイメージ
 type VisualNovel = {
-  id: string;        // IDは文字列（例: "v11"）
-  title: string;     // タイトルは文字列（例: "Fate/stay night"）
-  rating: number;    // 評価点は数値（例: 8.5）
-  image_url: string; // ✨ 画像URL（パッケージ画像のWebアドレス）を追加
+  id: string;               // IDは文字列（例: "v11"）
+  title: string;            // タイトルは文字列（ローマ字表記、例: "Fate/stay night"）
+  alttitle: string | null;  // 日本語タイトル（例: "沙耶の唄」）nullの場合もある
+  rating: number;           // 評価点は数値（例: 8.5）
+  image_url: string;        // 画像URL（パッケージ画像のWebアドレス）
+  votecount: number | null; // 投票数（例: 3923）
+  released: string | null;  // 発売日（例: "2007-04-12"）
+  tags: Array<{name: string; rating: number}> | null;  // タグ情報（JSONB配列）
 };
 
 // ========================================
@@ -49,10 +54,10 @@ export default async function Home() {
   // 「await」は「この処理が終わるまで待つ」という意味
   const client = await pool.connect();
   
-  // ✨ SQL変更: SELECT に image_url を追加しました
-  // これで、ID、タイトル、評価点に加えて、画像URLも一緒に取得できる
+  // SQLクエリ: 必要なデータを取得
+  // タグ、投票数、発売日も含めて取得します
   const result = await client.query<VisualNovel>(
-    'SELECT id, title, rating, image_url FROM visual_novels ORDER BY rating DESC LIMIT 10'
+    'SELECT id, title, alttitle, rating, image_url, votecount, released, tags FROM visual_novels ORDER BY rating DESC LIMIT 100'
   );
   
   // SQLの実行結果から「行データ（rows）」を取り出す
@@ -76,7 +81,7 @@ export default async function Home() {
     // Tailwind CSS という書き方で、クラス名だけでデザインを指定している
     <div className="min-h-screen p-8 bg-gray-50">
       {/* メインコンテンツの枠 */}
-      <main className="max-w-4xl mx-auto">
+      <main className="max-w-7xl mx-auto">
         
         {/* ページのタイトル */}
         <h1 className="text-3xl font-bold mb-8 text-gray-800">
@@ -84,7 +89,7 @@ export default async function Home() {
         </h1>
 
         {/* ゲームのリスト（カード形式で並べる） */}
-        <div className="grid gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           
           {/* ここからJavaScriptのコード（波かっこ {} で囲む） */}
           {/* games.map() は配列の各要素に対して処理を繰り返す（Pythonの for文に相当） */}
@@ -124,18 +129,54 @@ export default async function Home() {
                 <div className="flex-grow flex flex-col justify-between">
                   
                   {/* タイトル表示 */}
-                  {/* {game.title} は変数の中身を埋め込む（Pythonの f-string に相当） */}
+                  {/* 日本語タイトル（alttitle）があればそれを表示、なければローマ字タイトル（title）を表示 */}
+                  {/* || は「または」という意味（alttitleがnullならtitleを使う） */}
                   <h2 className="text-xl font-semibold text-gray-900">
-                    {game.title}
+                    {game.alttitle || game.title}
                   </h2>
                   
-                  {/* スコア表示 */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-gray-500">スコア:</span>
-                    {/* text-2xl = 文字サイズを大きく（評価点を目立たせる） */}
-                    <span className="text-2xl font-bold text-blue-600">
-                      {game.rating}
-                    </span>
+                  {/* 発売日表示 */}
+                  {game.released && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {/* 発売日をYYYY-MM-DD形式から「YYYY年MM月」形式に変換 */}
+                      {new Date(game.released).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}
+                    </p>
+                  )}
+
+                  {/* タグ表示 */}
+                  {game.tags && game.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {/* タグは最大3つまで表示 */}
+                      {game.tags.slice(0, 3).map((tag, index) => (
+                        <span 
+                          key={index}
+                          className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded-full"
+                        >
+                          {/* translateTag関数で英語タグを日本語に翻訳 */}
+                          {translateTag(tag.name)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* スコアと投票数 */}
+                  <div className="mt-auto">
+                    {/* スコア表示 */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">スコア:</span>
+                      {/* text-2xl = 文字サイズを大きく（評価点を目立たせる） */}
+                      <span className="text-2xl font-bold text-blue-600">
+                        {game.rating}
+                      </span>
+                    </div>
+                    
+                    {/* 投票数表示 */}
+                    {game.votecount && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        {/* 投票数を3桁区切りで表示（例: 3,923） */}
+                        {game.votecount.toLocaleString()}票
+                      </p>
+                    )}
                   </div>
                 </div>
 

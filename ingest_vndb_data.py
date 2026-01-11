@@ -1,3 +1,4 @@
+#!/home/rich/eroge-db/.venv/bin/python
 # -----------------------------------------------------------------------------
 # データの取得と保存を行うプログラムです。（ステップ2：データ取得と保存の実装）
 # 初学者の方にも分かりやすいよう、各行に詳細なコメントをつけています。
@@ -74,9 +75,10 @@ def fetch_vndb_data():
         "id", "title", "alttitle", "released", "description",
         "image.url", "image.sexual", "image.violence",
         "rating", "votecount",
-        "tags.name", "tags.rating",  # タグ情報
-        "developers.name",           # 開発会社
-        "screenshots.url"            # スクショ
+        "titles.lang", "titles.title",  # 各言語のタイトル情報
+        "tags.name", "tags.rating",      # タグ情報
+        "developers.name",               # 開発会社
+        "screenshots.url"                # スクショ
     ]
     
     # APIに送るリクエストの内容（ペイロード）を作ります
@@ -85,7 +87,7 @@ def fetch_vndb_data():
         "fields": ", ".join(fields), # 上のリストをカンマ区切りの文字列にします
         "sort": "votecount",     # 人気投票数順にソートします
         "reverse": True,         # 降順（多い順）にします
-        "results": 10            # まずは10件だけ取得してみます
+        "results": 100           # 人気投票数トップ100件を取得します
     }
     
     headers = {'Content-Type': 'application/json'}
@@ -101,7 +103,31 @@ def fetch_vndb_data():
     return data.get('results', [])
 
 # -----------------------------------------------------------------------------
-# 3. データ保存関数（UPSERT処理）
+# 3. 日本語タイトル抽出関数
+# -----------------------------------------------------------------------------
+def get_japanese_title(vn_data):
+    """
+    titles配列から lang: "ja" のタイトルを探して返す。
+    見つからなければ alttitle を返す。
+    これにより、「かたわ少女」や「ドキドキ文芸部!」のような
+    日本語タイトルを優先的に取得できる。
+    """
+    # まず既存の alttitle をチェック
+    alttitle = vn_data.get('alttitle')
+    if alttitle:  # alttitle が存在すればそれを返す
+        return alttitle
+    
+    # alttitle がない場合、titles配列から lang: "ja" を探す
+    titles_list = vn_data.get('titles', [])
+    for t in titles_list:
+        if t.get('lang') == 'ja':  # 日本語のタイトルを発見
+            return t.get('title')
+    
+    # どちらもなければ None を返す
+    return None
+
+# -----------------------------------------------------------------------------
+# 4. データ保存関数（UPSERT処理）
 # -----------------------------------------------------------------------------
 def upsert_visual_novel(conn, vn_data):
     """
@@ -115,7 +141,8 @@ def upsert_visual_novel(conn, vn_data):
     # .get() を使うと、キーが存在しない場合にエラーにならず None を返してくれます
     vn_id = vn_data.get('id')
     title = vn_data.get('title')
-    alttitle = vn_data.get('alttitle')
+    # 日本語タイトルを取得（alttitle または titles配列から）
+    alttitle = get_japanese_title(vn_data)
     released = vn_data.get('released')
     description = vn_data.get('description')
     

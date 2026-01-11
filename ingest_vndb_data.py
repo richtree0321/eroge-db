@@ -16,6 +16,82 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # -----------------------------------------------------------------------------
+# タグ翻訳辞書（英語→日本語）
+# VNDBから取得したタグを日本語に翻訳するための辞書
+# -----------------------------------------------------------------------------
+TAG_TRANSLATIONS = {
+    # ジャンル・カテゴリ
+    'ADV': 'アドベンチャー',
+    'AVG': 'アドベンチャー',
+    'Horror': 'ホラー',
+    'Romance': 'ロマンス',
+    'Comedy': 'コメディ',
+    'Drama': 'ドラマ',
+    'Fantasy': 'ファンタジー',
+    'Sci-fi': 'SF',
+    'Mystery': 'ミステリー',
+    'Thriller': 'スリラー',
+    'Action': 'アクション',
+    
+    # 主人公
+    'Male Protagonist': '男性主人公',
+    'Female Protagonist': '女性主人公',
+    
+    # 設定
+    'School Life': '学校生活',
+    'High School': '高校',
+    'School': '学校',
+    'College': '大学',
+    'Modern Day': '現代',
+    'Future': '未来',
+    'Past': '過去',
+    'Japan': '日本',
+    'Slice of Life': '日常系',
+    
+    # メカニクス
+    'Multiple Endings': 'マルチエンディング',
+    'Choices': '選択肢',
+    'Branching Plot': '分岐シナリオ',
+    'Linear Plot': '一本道',
+    'Point and Click': 'ポイント&クリック',
+    
+    # コンテンツ警告
+    'Sexual Content': '性的コンテンツ',
+    'Eroge': 'エロゲ',
+    'No Sexual Content': '性的コンテンツなし',
+    'Violence': '暴力表現',
+    'Gore': 'グロ表現',
+    
+    # その他人気タグ
+    'Nakige': '泣きゲー',
+    'Utsuge': '鬱ゲー',
+    'Kinetic Novel': 'キネティックノベル',
+    'Visual Novel': 'ビジュアルノベル',
+    'RPG': 'RPG',
+    'Simulation': 'シミュレーション',
+    'Strategy': 'ストラテジー',
+    'Puzzle': 'パズル',
+    
+    # テーマ
+    'Time Travel': 'タイムトラベル',
+    'Supernatural': '超常現象',
+    'Magic': '魔法',
+    'War': '戦争',
+    'Post-apocalyptic': 'ポストアポカリプス',
+    'Cyberpunk': 'サイバーパンク',
+    'Steampunk': 'スチームパンク',
+    
+    # キャラクター属性
+    'Tsundere': 'ツンデレ',
+    'Yandere': 'ヤンデレ',
+    'Kuudere': 'クーデレ',
+    'Childhood Friend': '幼馴染',
+    'Maid': 'メイド',
+    'Teacher': '教師',
+    'Student': '学生',
+}
+
+# -----------------------------------------------------------------------------
 # 1. 設定・接続・テーブル作成（ステップ1と同じ）
 # -----------------------------------------------------------------------------
 DB_CONFIG = {
@@ -155,9 +231,24 @@ def upsert_visual_novel(conn, vn_data):
     rating = vn_data.get('rating')
     votecount = vn_data.get('votecount')
     
+    # --- タグ処理：日本語翻訳を追加 ---
+    # VNDBから取得したタグ（英語）に、日本語名（name_ja）を追加します
+    tags_raw = vn_data.get('tags', [])  # タグのリストを取得（なければ空リスト）
+    tags_with_translation = []  # 翻訳済みタグを格納するリスト
+    
+    for tag in tags_raw:
+        # 既存のタグデータをそのまま保持
+        tag_name = tag.get('name', '')  # タグの英語名
+        
+        # 翻訳辞書から日本語名を取得（なければ英語名をそのまま使用）
+        tag['name_ja'] = TAG_TRANSLATIONS.get(tag_name, tag_name)
+        
+        # 翻訳済みタグをリストに追加
+        tags_with_translation.append(tag)
+    
     # リスト形式のデータ（タグなど）は、DB保存用にJSON形式に変換します
     # psycopg2.extras.Json() が便利です
-    tags = Json(vn_data.get('tags', []))
+    tags = Json(tags_with_translation)  # 翻訳済みタグをJSON化
     developers = Json(vn_data.get('developers', []))
     screenshots = Json(vn_data.get('screenshots', []))
     

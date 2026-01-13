@@ -5,11 +5,57 @@
 import { pool } from "@/lib/db"; // 共通化されたDBプールをインポート
 import Link from "next/link"; // Next.js のリンクコンポーネント
 import { Character, Staff } from "@/lib/types"; // 型定義をインポート
+import { buildExternalUrl, ExternalLinkItem } from "@/lib/extlinks"; // 外部リンク変換関数と型をインポート
+import ExternalLinksSection from "./ExternalLinksSection"; // 外部リンク表示コンポーネントをインポート
 
 // ページの引数型（Next.js 15 では params は Promise）
 type PageProps = {
   params: Promise<{ id: string }>; // URL パラメータ（例: /game/v11 の "v11"）
 };
+
+type ExternalLinkRow = { // 外部リンクの基本行（VN用）を表す型
+  site: string; // サイト識別子
+  value: string; // 外部リンクの値
+}; // 型定義の終わり
+
+type ReleaseExternalLinkRow = { // リリース外部リンクの行を表す型
+  release_id: string; // リリースID
+  release_title: string | null; // リリースタイトル（日本語があれば使用）
+  site: string; // サイト識別子
+  value: string; // 外部リンクの値
+}; // 型定義の終わり
+
+type ProducerExternalLinkRow = { // 制作会社外部リンクの行を表す型
+  producer_id: string; // 制作会社ID
+  producer_name: string; // 制作会社名
+  site: string; // サイト識別子
+  value: string; // 外部リンクの値
+}; // 型定義の終わり
+
+type StaffExternalLinkRow = { // スタッフ外部リンクの行を表す型
+  staff_id: string; // スタッフID
+  staff_name: string; // スタッフ名
+  site: string; // サイト識別子
+  value: string; // 外部リンクの値
+}; // 型定義の終わり
+
+type ReleaseLinkGroup = { // リリースごとの外部リンクのまとまりを表す型
+  releaseId: string; // リリースID
+  releaseTitle: string | null; // リリースタイトル
+  links: ExternalLinkItem[]; // 外部リンク配列
+}; // 型定義の終わり
+
+type ProducerLinkGroup = { // 制作会社ごとの外部リンクのまとまりを表す型
+  producerId: string; // 制作会社ID
+  producerName: string; // 制作会社名
+  links: ExternalLinkItem[]; // 外部リンク配列
+}; // 型定義の終わり
+
+type StaffLinkGroup = { // スタッフごとの外部リンクのまとまりを表す型
+  staffId: string; // スタッフID
+  staffName: string; // スタッフ名
+  links: ExternalLinkItem[]; // 外部リンク配列
+}; // 型定義の終わり
 
 export default async function GameDetailPage({ params }: PageProps) {
   // params を await して id を取得
@@ -77,8 +123,16 @@ export default async function GameDetailPage({ params }: PageProps) {
     // 3. 関連データを並列取得（Promise.all で高速化）
     // ========================================
     // 依存関係がないクエリは同時に実行してTTFBを短縮
-    const [tagsResult, screenshotsResult, charsResult, staffResult] =
-      await Promise.all([
+    const [ // 並列取得の結果を配列で受け取る
+      tagsResult, // タグ取得の結果
+      screenshotsResult, // スクリーンショット取得の結果
+      charsResult, // キャラクター取得の結果
+      staffResult, // スタッフ取得の結果
+      vnLinksResult, // VN外部リンク取得の結果
+      releaseLinksResult, // リリース外部リンク取得の結果
+      producerLinksResult, // 制作会社外部リンク取得の結果
+      staffLinksResult, // スタッフ外部リンク取得の結果
+    ] = await Promise.all([ // Promise.allでクエリを並列実行
         // タグ情報を取得
         client.query(
           `
@@ -155,11 +209,137 @@ export default async function GameDetailPage({ params }: PageProps) {
           `,
           [id]
         ),
+
+        // VN外部リンクを取得
+        client.query<ExternalLinkRow>( // VNに直接紐付く外部リンクを取得
+          `
+          SELECT 
+            e.site,
+            e.value
+          FROM vndb.vn_extlinks ve
+          JOIN vndb.extlinks e ON e.id = ve.link
+          WHERE ve.id = $1
+          ORDER BY e.site, e.value
+          `,
+          [id]
+        ), // VN外部リンクのクエリ終わり
+
+        // リリース外部リンクを取得
+        client.query<ReleaseExternalLinkRow>( // リリースに紐付く外部リンクを取得
+          `
+          SELECT 
+            rv.id as release_id,
+            rt.title as release_title,
+            e.site,
+            e.value
+          FROM vndb.releases_vn rv
+          JOIN vndb.releases_extlinks rel ON rel.id = rv.id
+          JOIN vndb.extlinks e ON e.id = rel.link
+          LEFT JOIN vndb.releases_titles rt ON rt.id = rv.id AND rt.lang = 'ja'
+          WHERE rv.vid = $1
+          ORDER BY rv.id, e.site, e.value
+          `,
+          [id]
+        ), // リリース外部リンクのクエリ終わり
+
+        // 制作会社外部リンクを取得
+        client.query<ProducerExternalLinkRow>( // 制作会社に紐付く外部リンクを取得
+          `
+          SELECT DISTINCT
+            p.id as producer_id,
+            p.name as producer_name,
+            e.site,
+            e.value
+          FROM vndb.releases_vn rv
+          JOIN vndb.releases_producers rp ON rp.id = rv.id
+          JOIN vndb.producers p ON p.id = rp.pid
+          JOIN vndb.producers_extlinks pe ON pe.id = p.id
+          JOIN vndb.extlinks e ON e.id = pe.link
+          WHERE rv.vid = $1
+          ORDER BY p.name, e.site, e.value
+          `,
+          [id]
+        ), // 制作会社外部リンクのクエリ終わり
+
+        // スタッフ外部リンクを取得
+        client.query<StaffExternalLinkRow>( // スタッフに紐付く外部リンクを取得
+          `
+          SELECT DISTINCT
+            sa.id as staff_id,
+            sa.name as staff_name,
+            e.site,
+            e.value
+          FROM vndb.vn_staff vs
+          JOIN vndb.staff_alias sa ON sa.aid = vs.aid
+          JOIN vndb.staff_extlinks se ON se.id = sa.id
+          JOIN vndb.extlinks e ON e.id = se.link
+          WHERE vs.id = $1
+          ORDER BY sa.name, e.site, e.value
+          `,
+          [id]
+        ), // スタッフ外部リンクのクエリ終わり
       ]);
 
     // 取得結果を変数に格納
-    const tags = tagsResult.rows;
-    const staff = staffResult.rows;
+    const tags = tagsResult.rows; // タグ結果を変数に入れる
+    const staff = staffResult.rows; // スタッフ結果を変数に入れる
+
+    const vnLinks = vnLinksResult.rows.map((link) => ({ // VN外部リンクをURL化して配列にする
+      site: link.site, // サイト識別子をコピー
+      value: link.value, // 元の値をコピー
+      url: buildExternalUrl(link.site, link.value), // ルールに従ってURL化
+    })); // VN外部リンク配列の作成終わり
+
+    const releaseLinksById: Record<string, ReleaseLinkGroup> = {}; // リリースIDごとに外部リンクをまとめる入れ物
+    releaseLinksResult.rows.forEach((row) => { // 取得したリリース外部リンクを順に処理
+      if (!releaseLinksById[row.release_id]) { // まだそのリリースIDが登録されていない場合
+        releaseLinksById[row.release_id] = { // 新しいリリースグループを作成
+          releaseId: row.release_id, // リリースIDを保存
+          releaseTitle: row.release_title, // リリースタイトルを保存
+          links: [], // 外部リンクの配列を初期化
+        }; // グループ作成の終わり
+      } // ifブロックの終わり
+      releaseLinksById[row.release_id].links.push({ // 該当リリースのリンク配列に追加
+        site: row.site, // サイト識別子を保存
+        value: row.value, // 元の値を保存
+        url: buildExternalUrl(row.site, row.value), // URL化した結果を保存
+      }); // 追加処理の終わり
+    }); // forEachの終わり
+    const releaseLinkGroups = Object.values(releaseLinksById); // まとまりを配列に変換
+
+    const producerLinksById: Record<string, ProducerLinkGroup> = {}; // 制作会社IDごとの外部リンクをまとめる入れ物
+    producerLinksResult.rows.forEach((row) => { // 取得した制作会社外部リンクを順に処理
+      if (!producerLinksById[row.producer_id]) { // まだその制作会社IDが登録されていない場合
+        producerLinksById[row.producer_id] = { // 新しい制作会社グループを作成
+          producerId: row.producer_id, // 制作会社IDを保存
+          producerName: row.producer_name, // 制作会社名を保存
+          links: [], // 外部リンクの配列を初期化
+        }; // グループ作成の終わり
+      } // ifブロックの終わり
+      producerLinksById[row.producer_id].links.push({ // 該当制作会社のリンク配列に追加
+        site: row.site, // サイト識別子を保存
+        value: row.value, // 元の値を保存
+        url: buildExternalUrl(row.site, row.value), // URL化した結果を保存
+      }); // 追加処理の終わり
+    }); // forEachの終わり
+    const producerLinkGroups = Object.values(producerLinksById); // まとまりを配列に変換
+
+    const staffLinksById: Record<string, StaffLinkGroup> = {}; // スタッフIDごとの外部リンクをまとめる入れ物
+    staffLinksResult.rows.forEach((row) => { // 取得したスタッフ外部リンクを順に処理
+      if (!staffLinksById[row.staff_id]) { // まだそのスタッフIDが登録されていない場合
+        staffLinksById[row.staff_id] = { // 新しいスタッフグループを作成
+          staffId: row.staff_id, // スタッフIDを保存
+          staffName: row.staff_name, // スタッフ名を保存
+          links: [], // 外部リンクの配列を初期化
+        }; // グループ作成の終わり
+      } // ifブロックの終わり
+      staffLinksById[row.staff_id].links.push({ // 該当スタッフのリンク配列に追加
+        site: row.site, // サイト識別子を保存
+        value: row.value, // 元の値を保存
+        url: buildExternalUrl(row.site, row.value), // URL化した結果を保存
+      }); // 追加処理の終わり
+    }); // forEachの終わり
+    const staffLinkGroups = Object.values(staffLinksById); // まとまりを配列に変換
 
     // スクリーンショットのURLを構築（バケット計算）
     const screenshots = screenshotsResult.rows.map((ss) => {
@@ -317,6 +497,8 @@ export default async function GameDetailPage({ params }: PageProps) {
               </div>
             </div>
           </div>
+
+          <ExternalLinksSection vnLinks={vnLinks} releaseLinkGroups={releaseLinkGroups} producerLinkGroups={producerLinkGroups} staffLinkGroups={staffLinkGroups} /> {/* 外部リンクセクションを表示 */}
 
           {/* キャラクターセクション */}
           {characters.length > 0 && (

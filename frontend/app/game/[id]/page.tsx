@@ -2,44 +2,43 @@
 // ゲーム詳細ページ - vndb スキーマから直接取得
 // ========================================
 
-import { Pool } from "pg";
-import Link from "next/link";
-import { Character, Staff } from "@/lib/types"; // 追加
+import { pool } from "@/lib/db"; // 共通化されたDBプールをインポート
+import Link from "next/link"; // Next.js のリンクコンポーネント
+import { Character, Staff } from "@/lib/types"; // 型定義をインポート
 
-// データベース接続プール
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-
-// ページの引数型
+// ページの引数型（Next.js 15 では params は Promise）
 type PageProps = {
-  params: Promise<{ id: string }>;
+  params: Promise<{ id: string }>; // URL パラメータ（例: /game/v11 の "v11"）
 };
 
 export default async function GameDetailPage({ params }: PageProps) {
+  // params を await して id を取得
   const { id } = await params;
+  // データベースからコネクションを取得
   const client = await pool.connect();
 
   try {
-    // 1. 基本情報を取得 (vndb.vn テーブル)
+    // ========================================
+    // 1. 基本情報を取得（必須、存在チェックに使用）
+    // ========================================
     const vnResult = await client.query(
       `
       SELECT 
         v.id,
-        v.c_rating::numeric / 10 as rating,
-        v.c_votecount as votecount,
-        v.description,
-        v.c_image,
-        (SELECT t.title FROM vndb.vn_titles t WHERE t.id = v.id AND t.lang = v.olang LIMIT 1) as title,
-        (SELECT t.title FROM vndb.vn_titles t WHERE t.id = v.id AND t.lang = 'ja' LIMIT 1) as title_ja
+        v.c_rating::numeric / 10 as rating,  -- 評価スコア（10で割って100点満点に）
+        v.c_votecount as votecount,          -- 投票数
+        v.description,                        -- 作品説明
+        v.c_image,                            -- カバー画像ID
+        (SELECT t.title FROM vndb.vn_titles t WHERE t.id = v.id AND t.lang = v.olang LIMIT 1) as title,      -- 原語タイトル
+        (SELECT t.title FROM vndb.vn_titles t WHERE t.id = v.id AND t.lang = 'ja' LIMIT 1) as title_ja       -- 日本語タイトル
       FROM vndb.vn v
       WHERE v.id = $1
     `,
       [id]
     );
 
+    // ゲームが見つからない場合は404的な表示
     if (vnResult.rows.length === 0) {
-      client.release();
       return (
         <div className="min-h-screen p-8 bg-gray-50">
           <main className="max-w-4xl mx-auto">
@@ -58,80 +57,123 @@ export default async function GameDetailPage({ params }: PageProps) {
       );
     }
 
-    const game = vnResult.rows[0];
+    const game = vnResult.rows[0]; // 取得したゲームデータ
 
-    // 2. 画像URLを構築 (バケット = ID % 100)
+    // ========================================
+    // 2. 画像URLを構築（VNDBのバケット計算ロジック）
+    // ========================================
+    // 画像IDは "cv12345" のような形式で、12345 % 100 がバケット番号
     const coverUrl = game.c_image
       ? (() => {
-          const numPart = game.c_image.substring(2);
+          const numPart = game.c_image.substring(2); // "cv" を除去
           const bucket = (parseInt(numPart, 10) % 100)
             .toString()
-            .padStart(2, "0");
+            .padStart(2, "0"); // 2桁のバケット番号
           return `https://s2.vndb.org/cv/${bucket}/${numPart}.jpg`;
         })()
       : null;
 
-    // 3. タグ情報を取得
-    const tagsResult = await client.query(
-      `
-      SELECT DISTINCT t.name, t.id
-      FROM vndb.tags t
-      JOIN vndb.tags_vn tv ON t.id = tv.tag
-      WHERE tv.vid = $1 AND tv.vote > 0 AND NOT tv.ignore
-      LIMIT 20
-    `,
-      [id]
-    );
-    const tags = tagsResult.rows;
+    // ========================================
+    // 3. 関連データを並列取得（Promise.all で高速化）
+    // ========================================
+    // 依存関係がないクエリは同時に実行してTTFBを短縮
+    const [tagsResult, screenshotsResult, charsResult, staffResult] =
+      await Promise.all([
+        // タグ情報を取得
+        client.query(
+          `
+          SELECT DISTINCT t.name, t.id
+          FROM vndb.tags t
+          JOIN vndb.tags_vn tv ON t.id = tv.tag
+          WHERE tv.vid = $1 AND tv.vote > 0 AND NOT tv.ignore
+          LIMIT 20
+        `,
+          [id]
+        ),
 
-    // 4. スクリーンショットを取得
-    const screenshotsResult = await client.query(
-      `
-      SELECT i.id
-      FROM vndb.images i
-      JOIN vndb.vn_screenshots vs ON i.id = vs.scr
-      WHERE vs.id = $1
-      LIMIT 12 -- 少し増やしました
-    `,
-      [id]
-    );
+        // スクリーンショットを取得
+        client.query(
+          `
+          SELECT i.id
+          FROM vndb.images i
+          JOIN vndb.vn_screenshots vs ON i.id = vs.scr
+          WHERE vs.id = $1
+          LIMIT 12
+        `,
+          [id]
+        ),
+
+        // キャラクター情報を取得
+        client.query<Character>(
+          `
+          SELECT 
+            c.id, 
+            COALESCE(cn.name, (SELECT name FROM vndb.chars_names WHERE id = c.id LIMIT 1)) as name,
+            cv.role, 
+            c.image as image_url,
+            c.gender
+          FROM vndb.chars_vns cv
+          JOIN vndb.chars c ON cv.id = c.id
+          LEFT JOIN vndb.chars_names cn ON c.id = cn.id AND cn.lang = 'ja'
+          WHERE cv.vid = $1
+          ORDER BY 
+              CASE cv.role 
+                  WHEN 'main' THEN 1 
+                  WHEN 'primary' THEN 2 
+                  WHEN 'side' THEN 3 
+                  ELSE 4 
+              END, 
+              c.id
+          LIMIT 24
+          `,
+          [id]
+        ),
+
+        // スタッフ情報を取得
+        client.query<Staff>(
+          `
+          SELECT 
+            vs.aid as id,
+            s.name, 
+            vs.role, 
+            vs.note
+          FROM vndb.vn_staff vs
+          JOIN vndb.staff_alias s ON vs.aid = s.aid
+          WHERE vs.id = $1
+          ORDER BY 
+            CASE vs.role
+              WHEN 'scenario' THEN 1
+              WHEN 'chardesign' THEN 2
+              WHEN 'art' THEN 3
+              WHEN 'director' THEN 4
+              WHEN 'music' THEN 5
+              WHEN 'songs' THEN 6
+              ELSE 7
+            END,
+            s.name
+          LIMIT 30
+          `,
+          [id]
+        ),
+      ]);
+
+    // 取得結果を変数に格納
+    const tags = tagsResult.rows;
+    const staff = staffResult.rows;
+
+    // スクリーンショットのURLを構築（バケット計算）
     const screenshots = screenshotsResult.rows.map((ss) => {
-      const numPart = ss.id.substring(2);
+      const numPart = ss.id.substring(2); // "sf" を除去
       const bucket = (parseInt(numPart, 10) % 100).toString().padStart(2, "0");
       return { url: `https://s2.vndb.org/sf/${bucket}/${numPart}.jpg` };
     });
 
-    // 5. キャラクター情報を取得
-    const charsResult = await client.query<Character>(
-      `
-      SELECT 
-        c.id, 
-        COALESCE(cn.name, (SELECT name FROM vndb.chars_names WHERE id = c.id LIMIT 1)) as name,
-        cv.role, 
-        c.image as image_url,
-        c.gender
-      FROM vndb.chars_vns cv
-      JOIN vndb.chars c ON cv.id = c.id
-      LEFT JOIN vndb.chars_names cn ON c.id = cn.id AND cn.lang = 'ja'
-      WHERE cv.vid = $1
-      ORDER BY 
-          CASE cv.role 
-              WHEN 'main' THEN 1 
-              WHEN 'primary' THEN 2 
-              WHEN 'side' THEN 3 
-              ELSE 4 
-          END, 
-          c.id
-      LIMIT 24
-      `,
-      [id]
-    );
-
+    // キャラクター画像のURLを構築（バケット計算）
     const characters = charsResult.rows.map((char) => ({
       ...char,
       image_url: char.image_url
         ? (() => {
-            const numPart = char.image_url.substring(2);
+            const numPart = char.image_url.substring(2); // "ch" を除去
             const bucket = (parseInt(numPart, 10) % 100)
               .toString()
               .padStart(2, "0");
@@ -140,43 +182,13 @@ export default async function GameDetailPage({ params }: PageProps) {
         : null,
     }));
 
-    // 6. スタッフ情報を取得
-    const staffResult = await client.query<Staff>(
-      `
-      SELECT 
-        vs.aid as id,
-        s.name, 
-        vs.role, 
-        vs.note
-      FROM vndb.vn_staff vs
-      JOIN vndb.staff_alias s ON vs.aid = s.aid
-      WHERE vs.id = $1
-      ORDER BY 
-        CASE vs.role
-          WHEN 'scenario' THEN 1
-          WHEN 'chardesign' THEN 2
-          WHEN 'art' THEN 3
-          WHEN 'director' THEN 4
-          WHEN 'music' THEN 5
-          WHEN 'songs' THEN 6
-          ELSE 7
-        END,
-        s.name
-      LIMIT 30
-      `,
-      [id]
-    );
-    const staff = staffResult.rows;
-
-    client.release();
-
     // ========================================
-    // 画面を描画
+    // 画面を描画（JSX を返す）
     // ========================================
     return (
       <div className="min-h-screen p-8 bg-gray-50 text-gray-800">
         <main className="max-w-5xl mx-auto">
-          {/* ナビゲーション */}
+          {/* ナビゲーション：トップページに戻るリンク */}
           <Link
             href="/"
             className="text-blue-600 hover:underline mb-6 inline-block font-medium"
@@ -184,7 +196,7 @@ export default async function GameDetailPage({ params }: PageProps) {
             ← トップページに戻る
           </Link>
 
-          {/* メインカード */}
+          {/* メインカード：基本情報 */}
           <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
             <div className="flex flex-col md:flex-row gap-8">
               {/* 左: パッケージ画像 */}
@@ -204,15 +216,17 @@ export default async function GameDetailPage({ params }: PageProps) {
 
               {/* 右: 基本情報 */}
               <div className="flex-grow">
+                {/* タイトル（日本語優先） */}
                 <h1 className="text-3xl font-bold text-gray-900 mb-2">
                   {game.title_ja || game.title}
                 </h1>
 
+                {/* 原語タイトル（日本語がある場合のみ表示） */}
                 {game.title_ja && (
                   <p className="text-lg text-gray-500 mb-4">{game.title}</p>
                 )}
 
-                {/* 評価スコア */}
+                {/* 評価スコアと投票数 */}
                 <div className="flex items-center gap-4 mb-6 p-4 bg-blue-50 rounded-lg inline-flex">
                   <div>
                     <span className="text-sm text-gray-500 block">スコア</span>
@@ -264,10 +278,12 @@ export default async function GameDetailPage({ params }: PageProps) {
                   <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">
                     📖 あらすじ
                   </h2>
+                  {/* BBCodeを除去して表示 */}
                   <div className="text-gray-700 leading-relaxed whitespace-pre-wrap font-serif">
                     {game.description
-                      .replace(/\[url=.*?\](.*?)\[\/url\]/g, "$1")
-                      .replace(/\[.*?\]/g, "")}
+                      .replace(/\[url=.*?\](.*?)\[\/url\]/g, "$1") // [url]タグを除去
+                      .replace(/\[.*?\]/g, "")}{" "}
+                    {/* その他のBBCodeを除去 */}
                   </div>
                 </div>
               )}
@@ -314,6 +330,7 @@ export default async function GameDetailPage({ params }: PageProps) {
                     key={char.id}
                     className="flex flex-col items-center text-center group"
                   >
+                    {/* キャラクター画像 */}
                     <div className="relative w-full aspect-[3/4] mb-3 overflow-hidden rounded-lg shadow-sm bg-gray-100">
                       {char.image_url ? (
                         <img
@@ -326,19 +343,20 @@ export default async function GameDetailPage({ params }: PageProps) {
                           No Image
                         </div>
                       )}
-                      {/* 役割バッジ */}
+                      {/* 役割バッジ（main/primary/sideで色分け） */}
                       <span
                         className={`absolute top-1 left-1 text-[10px] px-2 py-0.5 rounded-full font-bold text-white shadow-sm ${
                           char.role === "main"
-                            ? "bg-red-500"
+                            ? "bg-red-500" // メインキャラは赤
                             : char.role === "primary"
-                            ? "bg-blue-500"
-                            : "bg-gray-400"
+                            ? "bg-blue-500" // プライマリは青
+                            : "bg-gray-400" // その他はグレー
                         }`}
                       >
                         {char.role.toUpperCase()}
                       </span>
                     </div>
+                    {/* キャラクター名 */}
                     <div className="text-sm font-bold text-gray-800 leading-tight">
                       {char.name}
                     </div>
@@ -376,8 +394,11 @@ export default async function GameDetailPage({ params }: PageProps) {
         </main>
       </div>
     );
-  } catch (error) {
+  } finally {
+    // ----------------------------------------
+    // 必ずコネクションを解放する（try/finally パターン）
+    // これにより例外が発生しても接続リークを防止
+    // ----------------------------------------
     client.release();
-    throw error;
   }
 }
